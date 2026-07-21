@@ -1,0 +1,27 @@
+#!/bin/bash
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+
+DIR_NAME=$(basename "$SCRIPT_DIR")
+
+bash "${SCRIPT_DIR}/configure-dot-env-file"
+
+DESKTOP_VOLUMES_DIR_PATH=$(cat "${SCRIPT_DIR}/.env" | grep -E '^DESKTOP_VOLUMES_DIR_PATH=' | sed -E 's#^DESKTOP_VOLUMES_DIR_PATH=##')
+HOME_USER_ID=$(cat "${SCRIPT_DIR}/.env" | grep -E '^HOME_USER_ID=' | sed -E 's#^HOME_USER_ID=##')
+
+sudo mkdir -p "${DESKTOP_VOLUMES_DIR_PATH}"
+sudo chown "${HOME_USER_ID}:${HOME_USER_ID}" "${DESKTOP_VOLUMES_DIR_PATH}"
+sudo mkdir -p "${DESKTOP_VOLUMES_DIR_PATH}/${DIR_NAME}"
+sudo chown "${HOME_USER_ID}:${HOME_USER_ID}" "${DESKTOP_VOLUMES_DIR_PATH}/${DIR_NAME}"
+
+while read -r volume_dir_path
+do
+    sudo mkdir -p "$volume_dir_path"
+    sudo chown "${HOME_USER_ID}:${HOME_USER_ID}" "$volume_dir_path"
+done <<< $(\
+    cat "${SCRIPT_DIR}/docker-compose.yml" | \
+    yq -r '.services[].volumes[]' | \
+    grep -E '^\${DESKTOP_VOLUMES_DIR_PATH}' | \
+    sed -E 's#\$\{DESKTOP_VOLUMES_DIR_PATH\}#'"${DESKTOP_VOLUMES_DIR_PATH}"'#g' | \
+    sed -E 's#\$\{DIR_NAME\}#'"${DIR_NAME}"'#g' | \
+    sed -E 's#:.+##g' \
+)

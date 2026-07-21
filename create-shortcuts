@@ -1,0 +1,44 @@
+#!/bin/bash
+if [ -z "$BIN_DIR_PATH" ]; then
+    BIN_DIR_PATH="${HOME}/.bin"
+fi
+
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+
+SCRIPT_DIR_PATH_FROM_HOME=$(echo "$SCRIPT_DIR" | sed -E 's#'"$HOME"'#~#')
+
+DIR_NAME=$(basename "$SCRIPT_DIR")
+NAME=$(echo -n "$DIR_NAME" | sed -E 's/-desktop$//g')
+
+
+mkdir -p "$BIN_DIR_PATH"
+
+
+cat << EOF > "$BIN_DIR_PATH/open-desktop-${NAME}"
+#!/bin/bash
+cd ${SCRIPT_DIR_PATH_FROM_HOME}
+./connect-desktop-environment
+EOF
+chmod +x "$BIN_DIR_PATH/open-desktop-${NAME}"
+
+
+cat << EOF > "$BIN_DIR_PATH/start-desktop-${NAME}"
+#!/bin/bash
+cd ${SCRIPT_DIR_PATH_FROM_HOME}
+./start-compose-desktop-environment
+EOF
+chmod +x "$BIN_DIR_PATH/start-desktop-${NAME}"
+
+cat << EOF > "$BIN_DIR_PATH/start-desktop-${NAME}-interactive"
+#!/bin/bash
+cd ${SCRIPT_DIR_PATH_FROM_HOME}
+./start-interactive-container-desktop-environment
+EOF
+chmod +x "$BIN_DIR_PATH/start-desktop-${NAME}-interactive"
+
+cat << EOF > "$BIN_DIR_PATH/stop-desktop-${NAME}"
+#!/bin/bash
+cd ${SCRIPT_DIR_PATH_FROM_HOME}
+./stop-compose-desktop-environment
+EOF
+chmod +x "$BIN_DIR_PATH/stop-desktop-${NAME}"

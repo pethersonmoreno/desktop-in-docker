@@ -1,0 +1,55 @@
+services:
+  desktop-environment:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - HOME_USER=$HOME_USER
+        - HOME_USER_ID=$HOME_USER_ID
+    container_name: ${DIR_NAME}-environment
+    shm_size: '1gb'
+    security_opt:
+      - seccomp=secomp-settings.json
+    environment:
+      - DISPLAY=${DISPLAY}
+      - PULSE_SERVER=unix:/home/${HOME_USER}/.sound-pulse-native
+    volumes:
+      # Som# Mapear o cookie de autenticação do host para o usuário dentro do contêiner
+      - ${HOME}/.config/pulse/cookie:/tmp/host-cookie:ro
+      - ${XDG_RUNTIME_DIR}/pulse/native:/home/${HOME_USER}/.sound-pulse-native:ro
+      # Outros
+      - ${DESKTOP_VOLUMES_DIR_PATH}/${DIR_NAME}/git:/home/${HOME_USER}/git
+      - ${DESKTOP_VOLUMES_DIR_PATH}/${DIR_NAME}/.config/google-chrome:/home/${HOME_USER}/.config/google-chrome
+      - ${DESKTOP_VOLUMES_DIR_PATH}/${DIR_NAME}/.config/keepassxc:/home/${HOME_USER}/.config/keepassxc
+      - ${DESKTOP_VOLUMES_DIR_PATH}/${DIR_NAME}/.config/xfce4:/home/${HOME_USER}/.config/xfce4
+      - ${DESKTOP_VOLUMES_DIR_PATH}/${DIR_NAME}/.config/Thunar:/home/${HOME_USER}/.config/Thunar
+      - ${DESKTOP_VOLUMES_DIR_PATH}/${DIR_NAME}/.config/gtk-3.0:/home/${HOME_USER}/.config/gtk-3.0 # Save Thunar shortcuts configured
+      # 
+      - ${DESKTOP_VOLUMES_DIR_PATH}/${DIR_NAME}/.cache:/home/${HOME_USER}/.cache
+      - ${DESKTOP_VOLUMES_DIR_PATH}/${DIR_NAME}/.gnome/apps:/home/${HOME_USER}/.gnome/apps
+      - ${DESKTOP_VOLUMES_DIR_PATH}/${DIR_NAME}/.gnupg:/home/${HOME_USER}/.gnupg
+      - ${DESKTOP_VOLUMES_DIR_PATH}/${DIR_NAME}/.local/share:/home/${HOME_USER}/.local/share
+      - ${DESKTOP_VOLUMES_DIR_PATH}/${DIR_NAME}/.ssh:/home/${HOME_USER}/.ssh
+      # - ${DESKTOP_VOLUMES_DIR_PATH}/${DIR_NAME}/.pki:/home/${HOME_USER}/.pki # not found yet to add
+      # 
+      - ${DESKTOP_VOLUMES_DIR_PATH}/${DIR_NAME}/.k:/home/${HOME_USER}/.k
+      - ${DESKTOP_VOLUMES_DIR_PATH}/${DIR_NAME}/Pictures:/home/${HOME_USER}/Pictures
+      - ${DESKTOP_VOLUMES_DIR_PATH}/${DIR_NAME}/.vnc/passwd:/home/${HOME_USER}/.vnc/passwd
+      - ${DESKTOP_VOLUMES_DIR_PATH}/${DIR_NAME}/etc/shadow:/etc/shadow
+
+    ports:
+      - "5909:5901"
+    user: "${HOME_USER_ID}:${HOME_USER_ID}"
+    cap_add:
+      - NET_ADMIN
+      - SYS_NICE
+    devices:
+      - /dev/net/tun:/dev/net/tun
+      - /dev/snd:/dev/snd
+      # Exemplo usando imagem lscr.io/linuxserver/webtop:ubuntu-xfce
+      - /dev/dri:/dev/dri # Passthrough de GPU integrada (Intel/AMD) para renderização gráfica
+    group_add:
+      - "audio"
+    ulimits:
+      rtprio: 99
+      rttime: -1

@@ -1,0 +1,63 @@
+#!/bin/bash
+
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+
+DIR_NAME=$(basename "$SCRIPT_DIR")
+
+bash "${SCRIPT_DIR}/configure-dot-env-file"
+
+DESKTOP_VOLUMES_DIR_PATH=$(cat "${SCRIPT_DIR}/.env" | grep -E '^DESKTOP_VOLUMES_DIR_PATH=' | sed -E 's#^DESKTOP_VOLUMES_DIR_PATH=##')
+VNC_PORT=$(cat "${SCRIPT_DIR}/docker-compose.yml" | yq -r '.services[].ports[]' | grep -E ':5901$' | sed -E 's/:5901$//g')
+HOME_USER=$(cat "${SCRIPT_DIR}/docker-compose.yml" | yq -r '.services[].build.args[]' | grep -E '^HOME_USER=' | sed -E 's/^HOME_USER=//g')
+HOME_USER_ID=$(cat "${SCRIPT_DIR}/docker-compose.yml" | yq -r '.services[].build.args[]' | grep -E '^HOME_USER_ID=' | sed -E 's/^HOME_USER_ID=//g')
+DOCKER_COMPOSE_SERVICE_NAME=$(cat "${SCRIPT_DIR}/docker-compose.yml" | yq -r '.services|keys|.[0]')
+SECCOMP_PATH="${SCRIPT_DIR}/$(cat "${SCRIPT_DIR}/docker-compose.yml" | yq -r '.services[].security_opt|.[]' | grep -E '^seccomp=' | sed -E 's/^seccomp=//g')"
+SHM_SIZE=$(cat "${SCRIPT_DIR}/docker-compose.yml" | yq -r '.services[].shm_size')
+IMAGE_NAME="${DIR_NAME}-${DOCKER_COMPOSE_SERVICE_NAME}"
+CONTAINER_NAME="$(cat "${SCRIPT_DIR}/docker-compose.yml" | yq -r '.services[].container_name')"
+
+# eval variables that use another var in docker compose yaml
+eval "HOME_USER=$HOME_USER"
+eval "HOME_USER_ID=$HOME_USER_ID"
+eval "CONTAINER_NAME=$CONTAINER_NAME"
+
+
+# 1. Verifica se o container já está rodando
+if [ "$(docker ps -q -f name=^/${CONTAINER_NAME}$)" ]; then
+    echo "✅ O container '$CONTAINER_NAME' já está rodando. Conectando interativamente no container."
+    docker logs "$CONTAINER_NAME" 
+    docker attach "$CONTAINER_NAME"
+
+# 2. Verifica se o container existe, mas está parado
+elif [ "$(docker ps -aq -f name=^/${CONTAINER_NAME}$)" ]; then
+    echo "🔄 O container existe, mas está parado. Iniciando agora de forma interativa..."
+    docker start -ai "$CONTAINER_NAME"
+
+# 3. Se não existe e não está rodando, cria um novo
+else
+    # Executa o script que calcula as resoluções
+    dados_resolucao=$("${SCRIPT_DIR}/calcula_resolucao.sh")
+    # Extrai os valores do JSON usando sed
+    total_largura=$(echo $dados_resolucao | sed -E 's/.*"total_largura": "([0-9]+)".*/\1/')
+    max_altura=$(echo $dados_resolucao | sed -E 's/.*"max_altura": "([0-9]+)".*/\1/')
+
+    echo "🚀 Container não encontrado. Criando e subindo contêiner com resolução: ${total_largura}x${max_altura}..."
+
+    docker run -it \
+    --security-opt "seccomp=${SECCOMP_PATH}" --shm-size=${SHM_SIZE} \
+    --name "${CONTAINER_NAME}" \
+    --env DISPLAY=$DISPLAY \
+    --env USER=${HOME_USER} \
+    --env TOTAL_LARGURA=${total_largura} \
+    --env MAX_ALTURA=${max_altura} \
+    --volume "/opt/desktop-environments/${DIR_NAME}/git:/home/${HOME_USER}/git" \
+    --volume "${DESKTOP_VOLUMES_DIR_PATH}/${DIR_NAME}/git:/home/${HOME_USER}/git" \
+    -p "${VNC_PORT}:5901" \
+    --user "${HOME_USER_ID}:${HOME_USER_ID}" \
+    --cap-add=NET_ADMIN \
+    --device=/dev/net/tun:/dev/net/tun \
+    --cap-add=SYS_NICE \
+    --ulimit rtprio=99:99 \
+    --ulimit rttime=-1:-1 \
+    "$IMAGE_NAME"
+fi

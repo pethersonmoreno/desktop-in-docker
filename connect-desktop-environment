@@ -1,0 +1,56 @@
+#!/bin/bash
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+
+DIR_NAME=$(basename "$SCRIPT_DIR")
+
+APP_NAME="Desktop Environment - ${DIR_NAME}"
+VNC_PORT=$(cat "${SCRIPT_DIR}/docker-compose.yml" | yq -r '.services[].ports[]' | grep -E ':5901$' | sed -E 's/:5901$//g')
+
+function get-window-title(){
+    local window_id=$1
+    local title=$(xprop -id $window_id _NET_WM_NAME 2>/dev/null | sed -n 's/.*= \(".*"\).*/\1/p' | jq -r .)
+    echo -n "$title"
+    return $?
+}
+function get-first-pending-tigervnc-window-id(){
+    local window_id
+    for window_id in $(xdotool search --onlyvisible --class "TigerVNC"); do
+        title=$(get-window-title $window_id)
+
+        if [ $(echo "$title" | grep -E ' - TigerVNC$' | wc -l) -eq 1 ]; then
+            echo -n "$window_id"
+            return $?
+        fi
+    done
+    return 1
+}
+
+function set-title-and-put-in-fullscreen(){
+    for i in {1..100}; do
+        PENDING_TIGERVNC_WINDOW_ID=$(get-first-pending-tigervnc-window-id)
+        if [ $? -eq 0 ]; then
+            xprop -id $PENDING_TIGERVNC_WINDOW_ID -f _NET_WM_NAME 8u -set _NET_WM_NAME "$APP_NAME"
+            WINDOW_HEX=$(printf "0x0%x\n" $PENDING_TIGERVNC_WINDOW_ID)
+            sleep 0.8
+            wmctrl -i -r $WINDOW_HEX -b add,fullscreen
+            break;
+        fi
+        sleep 0.01
+    done
+}
+
+function enter-vnc-password(){
+    local vnc_passord
+    read -s -p "Enter your VNC password for the Desktop Environment '$APP_NAME': " vnc_passord
+    echo -n "$vnc_passord"
+    return $?
+}
+
+VNC_PASSORD=$(enter-vnc-password)
+if [ -z "$VNC_PASSORD" ]; then
+    >&2 echo "VNC Password is required"
+    exit 1
+fi
+
+set-title-and-put-in-fullscreen &
+echo "$VNC_PASSORD" | vncpasswd -f | vncviewer -fullscreen -fullscreenmode=all -remoteresize=1 "localhost:${VNC_PORT}" -passwd /dev/stdin || echo -n ''

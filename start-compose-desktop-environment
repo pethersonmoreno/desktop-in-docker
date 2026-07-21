@@ -1,0 +1,8 @@
+#!/bin/bash
+
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+
+bash "${SCRIPT_DIR}/configure-dot-env-file"
+
+# 3. Inicia o contêiner em segundo plano
+docker compose up -d

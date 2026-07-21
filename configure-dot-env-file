@@ -1,0 +1,19 @@
+#!/bin/bash
+
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+
+DIR_NAME=$(basename "$SCRIPT_DIR")
+
+# Executa o script que calcula as resoluções
+dados_resolucao=$("${SCRIPT_DIR}/calcula_resolucao.sh")
+# Extrai os valores do JSON usando sed
+total_largura=$(echo $dados_resolucao | sed -E 's/.*"total_largura": "([0-9]+)".*/\1/')
+max_altura=$(echo $dados_resolucao | sed -E 's/.*"max_altura": "([0-9]+)".*/\1/')
+
+rm -f "${SCRIPT_DIR}/.env"
+cat "${SCRIPT_DIR}/.env.config" > "${SCRIPT_DIR}/.env"
+echo "DIR_NAME=$DIR_NAME" >> "${SCRIPT_DIR}/.env"
+echo "TOTAL_LARGURA=$total_largura" >> "${SCRIPT_DIR}/.env"
+echo "MAX_ALTURA=$max_altura" >> "${SCRIPT_DIR}/.env"
+
+echo "Configurações salvas em .env"
