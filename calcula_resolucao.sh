@@ -20,9 +20,10 @@ done
 
 # Verifica se encontrou alguma tela
 if [ -z "$resolucoes" ]; then
-    echo "Erro: Nenhuma tela conectada encontrada." >&2
-    exit 1
-else
-    # Retorna o resultado em JSON
-    echo "{\"total_largura\": \"$total_largura\", \"max_altura\": \"$max_altura\"}"
+    echo "Erro: Nenhuma tela conectada encontrada. Usando resolução 1920x1080" >&2
+    total_largura=1920
+    max_altura=1080
 fi
+
+# Retorna o resultado em JSON
+echo "{\"total_largura\": \"$total_largura\", \"max_altura\": \"$max_altura\"}"
