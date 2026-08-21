@@ -50,7 +50,6 @@ else
     --env USER=${HOME_USER} \
     --env TOTAL_LARGURA=${total_largura} \
     --env MAX_ALTURA=${max_altura} \
-    --volume "/opt/desktop-environments/${DIR_NAME}/git:/home/${HOME_USER}/git" \
     --volume "${DESKTOP_VOLUMES_DIR_PATH}/${DIR_NAME}/git:/home/${HOME_USER}/git" \
     -p "${VNC_PORT}:5901" \
     --user "${HOME_USER_ID}:${HOME_USER_ID}" \

@@ -1,3 +1,21 @@
+# syntax=docker/dockerfile:1
+# --- Compilação segura de rclone do código-fonte ---
+FROM golang:1.25 AS rclone_builder
+
+# Define o commit SHA de rclone exato que você deseja instalar (ex: versão v1.69.1)
+# NUNCA use apenas a tag, pois tags podem ser deletadas e recriadas maliciosamente.
+
+# v1.75.0 - 9ee9d0a0cafd5e5fe3b271d2280b090ab6e64048
+ARG RCLONE_COMMIT_SHA=9ee9d0a0cafd5e5fe3b271d2280b090ab6e64048
+
+WORKDIR /go/src/rclone
+
+# Baixa o repositório oficial, faz o checkout no commit exato verificado e compila
+RUN git clone https://github.com/rclone/rclone.git . \
+ && git checkout ${RCLONE_COMMIT_SHA} \
+ && go build
+
+
 FROM ubuntu:24.04
 
 ARG HOME_USER
@@ -15,6 +33,17 @@ ARG HOME_USER_ID
 #####\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/\/#####
 ############################################################################
 ############################################################################
+
+
+############################################################################
+#####    Instala o rclone no contexto do sistema                       #####
+#####     - instala antes para o mesmo ficar em cache desde o começo   #####
+############################################################################
+# Copia o binário estático compilado da Etapa 1 com segurança
+COPY --from=rclone_builder /go/src/rclone/rclone /usr/local/bin/
+# Garante permissões corretas de execução
+RUN chown root:root /usr/local/bin/rclone \
+ && chmod 755 /usr/local/bin/rclone
 
 
 ############################################################################
@@ -65,7 +94,10 @@ RUN apt-get update && \
     keepassxc \
     xcape \
     xfe \
-    filezilla && \
+    filezilla \
+    ffmpeg \
+    python3-secretstorage \
+    python3-keyring && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
@@ -108,6 +140,29 @@ RUN wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.d
 RUN wget -O vscode.deb 'https://code.visualstudio.com/sha/download?build=stable&os=linux-deb-x64' && \
     dpkg -i vscode.deb || apt-get -fy install && \
     rm vscode.deb
+
+
+############################################################################
+#####    Instala o yt-dlp no contexto do sistema                       #####
+#####     - system dependencies: python3-secretstorage and             #####
+#####                            python3-keyring                       #####
+############################################################################
+RUN wget https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -O /usr/local/bin/yt-dlp && \
+    chmod a+rx /usr/local/bin/yt-dlp && \
+    yt-dlp -U && \
+    echo "--js-runtimes node" > /etc/yt-dlp.conf && \
+    echo "--cookies-from-browser chrome" >> /etc/yt-dlp.conf
+
+############################################################################
+#####    Configura o script yt-audio-download                          #####
+############################################################################
+COPY <<EOF /usr/local/bin/yt-audio-download
+#!/bin/bash
+URL=\$1
+yt-dlp -x --audio-format mp3 --audio-quality 0 "\$URL"
+EOF
+RUN chmod +x /usr/local/bin/yt-audio-download
+
 
 ############################################################################
 #####    Configuração do usuário                                       #####
@@ -152,6 +207,8 @@ RUN curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | b
 ENV NVM_DIR="/home/$HOME_USER/.nvm"
 RUN echo 'export NVM_DIR="$([ -z "${XDG_CONFIG_HOME-}" ] && printf %s "${HOME}/.nvm" || printf %s "${XDG_CONFIG_HOME}/nvm")"' >> ~/.bashrc && \
     echo '[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"' >> ~/.bashrc
+# Install NodeJS in LTS version in NVM (required to use yt-dlp)
+RUN bash -c "source \$NVM_DIR/nvm.sh && nvm install --lts"
 
 ############################################################################
 #####    Configura o VNC no contexto do usuário                        #####
@@ -165,6 +222,13 @@ RUN mkdir .vnc && \
 ############################################################################
 RUN mkdir -p ~/bin/ && echo 'export PATH="$HOME/bin:$PATH"' >> ~/.bashrc
 ENV PATH="$HOME/bin:$PATH"
+
+
+############################################################################
+#####    Configura pasta ~/.bin do usuário                             #####
+############################################################################
+RUN mkdir -p ~/.bin/ && echo 'export PATH="$HOME/.bin:$PATH"' >> ~/.bashrc
+ENV PATH="$HOME/.bin:$PATH"
 
 ############################################################################
 #####    Cria pasta ~/.config do usuário                               #####
@@ -286,7 +350,68 @@ EXPOSE 5901
 ENV TOTAL_LARGURA=1920
 ENV MAX_ALTURA=1080
 
-CMD ["/bin/sh","-c","sudo cat /tmp/host-cookie > $HOME/.config/pulse/cookie && dbus-run-session -- vncserver -fg :1 -geometry ${TOTAL_LARGURA}x${MAX_ALTURA} -depth 24 -localhost no -SecurityTypes TLSVnc,VncAuth"]
+
+############################################################################
+#####    Configura o script google-drive-sync.sh                       #####
+############################################################################
+# ============> root <============ #
+USER root
+COPY <<EOF /home/$HOME_USER/bin/google-drive-sync.sh
+#!/bin/bash
+# Aguarda 10 segundos para dar tempo do sistema e rede subirem no container
+sleep 10
+
+if [ ! -f ~/.config/rclone/rclone.conf ]; then
+    exit 0
+fi
+
+LOCAL_DIRECTORY="\$HOME/drive-${HOME_USER}-desktop-environment"
+DRIVE_DIRECTORY="drive-${HOME_USER}-desktop-environment:"
+
+# Executa a primeira sincronização de marcação (obrigatória no bisync)
+rclone bisync "\$LOCAL_DIRECTORY" "\$DRIVE_DIRECTORY" --resync
+
+while true; do
+  # Executa a sincronização contínua
+  rclone bisync "\$LOCAL_DIRECTORY" "\$DRIVE_DIRECTORY"
+  
+  # Aguarda 1 minutos (60 segundos) antes da próxima checagem
+  sleep 60
+done
+
+EOF
+
+RUN chown "$HOME_USER:$HOME_USER" /home/$HOME_USER/bin/google-drive-sync.sh && \
+    chmod +x /home/$HOME_USER/bin/google-drive-sync.sh
+# ============> $HOME_USER <============ #
+USER $HOME_USER
+
+############################################################################
+#####    Configura o script desktop-entrypoint.sh                      #####
+############################################################################
+# ============> root <============ #
+USER root
+COPY <<EOF /home/$HOME_USER/bin/desktop-entrypoint.sh
+#!/bin/bash
+
+# 1. Comandos iniciais de cookie
+sudo cat /tmp/host-cookie > \$HOME/.config/pulse/cookie
+
+# 2. Inicia o script do rclone em SEGUNDO PLANO (&)
+~/bin/google-drive-sync.sh &
+
+# 3. Inicia o VNC em PRIMEIRO PLANO (Sem o '&' no final)
+dbus-run-session -- vncserver -fg :1 -geometry \${TOTAL_LARGURA}x\${MAX_ALTURA} -depth 24 -localhost no -SecurityTypes TLSVnc,VncAuth
+
+EOF
+
+RUN chown "$HOME_USER:$HOME_USER" /home/$HOME_USER/bin/desktop-entrypoint.sh && \
+    chmod +x /home/$HOME_USER/bin/desktop-entrypoint.sh
+# ============> $HOME_USER <============ #
+USER $HOME_USER
+
+
+CMD ["/bin/sh", "-c", "$HOME/bin/desktop-entrypoint.sh"]
 
 ############################################################################
 ############################################################################

@@ -15,6 +15,11 @@ if [ $# -gt 1 ]; then
 else
     VNC_PORT=$(cat "${SCRIPT_DIR}/docker-compose.yml" | yq -r '.services[].ports[]' | grep -E ':5901$' | sed -E 's/:5901$//g')
 fi
+if [ $# -gt 2 ]; then
+    VNC_OPTIONS="$3"
+else
+    VNC_OPTIONS='-fullscreen -fullscreenmode=Selected -FullScreenSelectedMonitors=2,3 -remoteresize=1'
+fi
 
 function get-window-title(){
     local window_id=$1
@@ -63,4 +68,10 @@ if [ -z "$VNC_PASSORD" ]; then
 fi
 
 set-title-and-put-in-fullscreen &
-echo "$VNC_PASSORD" | vncpasswd -f | vncviewer -fullscreen -fullscreenmode=all -remoteresize=1 "${VNC_HOST}:${VNC_PORT}" -passwd /dev/stdin || echo -n ''
+
+COMMAND="vncviewer ${VNC_OPTIONS} \"${VNC_HOST}:${VNC_PORT}\" -passwd /dev/stdin"
+
+echo "$ $COMMAND"
+
+echo "$VNC_PASSORD" | vncpasswd -f | bash -c "$COMMAND" || echo -n ''
+

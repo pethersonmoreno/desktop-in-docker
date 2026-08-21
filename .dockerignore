@@ -1,3 +1,5 @@
 /Dockerfile
 /*.yaml
 /*.sh
+/*
+!/xcape.desktop

@@ -6,6 +6,10 @@ services:
       args:
         - HOME_USER=$HOME_USER
         - HOME_USER_ID=$HOME_USER_ID
+      cache_to:
+        - type=local,dest=./.docker-cache,mode=max # <-- SALVA todos os estágios intermediários do build do docker na sua máquina
+      cache_from:
+        - type=local,src=./.docker-cache            # <-- LÊ o cache salvo no próximo build do docker
     container_name: ${DIR_NAME}-environment
     shm_size: '1gb'
     security_opt:
@@ -14,16 +18,19 @@ services:
       - DISPLAY=${DISPLAY}
       - PULSE_SERVER=unix:/home/${HOME_USER}/.sound-pulse-native
     volumes:
-      # Som# Mapear o cookie de autenticação do host para o usuário dentro do contêiner
+      # Som - Mapear o cookie de autenticação do host para o usuário dentro do contêiner
       - ${HOME}/.config/pulse/cookie:/tmp/host-cookie:ro
       - ${XDG_RUNTIME_DIR}/pulse/native:/home/${HOME_USER}/.sound-pulse-native:ro
       # Outros
       - ${DESKTOP_VOLUMES_DIR_PATH}/${DIR_NAME}/git:/home/${HOME_USER}/git
+      - ${DESKTOP_VOLUMES_DIR_PATH}/${DIR_NAME}/.bin:/home/${HOME_USER}/.bin
       - ${DESKTOP_VOLUMES_DIR_PATH}/${DIR_NAME}/.config/google-chrome:/home/${HOME_USER}/.config/google-chrome
       - ${DESKTOP_VOLUMES_DIR_PATH}/${DIR_NAME}/.config/keepassxc:/home/${HOME_USER}/.config/keepassxc
       - ${DESKTOP_VOLUMES_DIR_PATH}/${DIR_NAME}/.config/xfce4:/home/${HOME_USER}/.config/xfce4
+      - ${DESKTOP_VOLUMES_DIR_PATH}/${DIR_NAME}/.config/rclone:/home/${HOME_USER}/.config/rclone
       - ${DESKTOP_VOLUMES_DIR_PATH}/${DIR_NAME}/.config/Thunar:/home/${HOME_USER}/.config/Thunar
       - ${DESKTOP_VOLUMES_DIR_PATH}/${DIR_NAME}/.config/gtk-3.0:/home/${HOME_USER}/.config/gtk-3.0 # Save Thunar shortcuts configured
+      - ${DESKTOP_VOLUMES_DIR_PATH}/${DIR_NAME}/.config/filezilla:/home/${HOME_USER}/.config/filezilla
       # 
       - ${DESKTOP_VOLUMES_DIR_PATH}/${DIR_NAME}/.cache:/home/${HOME_USER}/.cache
       - ${DESKTOP_VOLUMES_DIR_PATH}/${DIR_NAME}/.gnome/apps:/home/${HOME_USER}/.gnome/apps
@@ -34,6 +41,7 @@ services:
       # 
       - ${DESKTOP_VOLUMES_DIR_PATH}/${DIR_NAME}/.k:/home/${HOME_USER}/.k
       - ${DESKTOP_VOLUMES_DIR_PATH}/${DIR_NAME}/Pictures:/home/${HOME_USER}/Pictures
+      - ${DESKTOP_VOLUMES_DIR_PATH}/${DIR_NAME}/drive-${HOME_USER}-desktop-environment:/home/${HOME_USER}/drive-${HOME_USER}-desktop-environment
       - ${DESKTOP_VOLUMES_DIR_PATH}/${DIR_NAME}/.vnc/passwd:/home/${HOME_USER}/.vnc/passwd
       - ${DESKTOP_VOLUMES_DIR_PATH}/${DIR_NAME}/etc/shadow:/etc/shadow
 
