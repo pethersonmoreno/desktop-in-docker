@@ -368,14 +368,36 @@ fi
 LOCAL_DIRECTORY="\$HOME/drive-${HOME_USER}-desktop-environment"
 DRIVE_DIRECTORY="drive-${HOME_USER}-desktop-environment:"
 
-# Executa a primeira sincronização de marcação (obrigatória no bisync)
-rclone bisync "\$LOCAL_DIRECTORY" "\$DRIVE_DIRECTORY" --resync
+# Parâmetros extras importantes para rodar de forma autônoma:
+# --conflict-resolve newer: Se houver edição simultânea, mantém o arquivo mais recente.
+# --verbose: (Opcional) Mantido caso você queira ler os logs depois.
+FLAGS="--conflict-resolve newer"
+
+# Tenta fazer o primeiro resync preventivo na inicialização
+rclone bisync "\$LOCAL_DIRECTORY" "\$DRIVE_DIRECTORY" --resync \$FLAGS
 
 while true; do
-  # Executa a sincronização contínua
-  rclone bisync "\$LOCAL_DIRECTORY" "\$DRIVE_DIRECTORY"
+  # 1. Tenta executar a sincronização contínua normal
+  rclone bisync "\$LOCAL_DIRECTORY" "\$DRIVE_DIRECTORY" \$FLAGS
   
-  # Aguarda 1 minutos (60 segundos) antes da próxima checagem
+  EXIT_CODE=\$?
+  
+  # 2. Avalia se ocorreu uma falha
+  if [ \$EXIT_CODE -ne 0 ]; then
+    echo "\$(date) - Falha detectada (Código \$EXIT_CODE). Iniciando auto-recuperação com --resync..."
+    
+    # 3. Executa a auto-recuperação exigida pelo rclone
+    rclone bisync "\$LOCAL_DIRECTORY" "\$DRIVE_DIRECTORY" --resync \$FLAGS
+    
+    REC_EXIT_CODE=\$?
+    if [ \$REC_EXIT_CODE -eq 0 ]; then
+        echo "\$(date) - Auto-recuperação concluída com sucesso."
+    else
+        echo "\$(date) - Erro crítico: A auto-recuperação também falhou. Tentará novamente no próximo ciclo."
+    fi
+  fi
+  
+  # Aguarda 1 minuto (60 segundos) antes da próxima checagem
   sleep 60
 done
 
