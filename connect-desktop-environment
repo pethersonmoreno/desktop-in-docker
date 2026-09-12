@@ -5,20 +5,25 @@ DIR_NAME=$(basename "$SCRIPT_DIR")
 
 APP_NAME="Desktop Environment - ${DIR_NAME}"
 
-if [ $# -gt 0 ]; then
+if [ $# -gt 0 ] && [ -n "$1" ]; then
     VNC_HOST="$1"
 else
     VNC_HOST="localhost"
 fi
-if [ $# -gt 1 ]; then
+if [ $# -gt 1 ] && [ -n "$2" ]; then
     VNC_PORT="$2"
 else
     VNC_PORT=$(cat "${SCRIPT_DIR}/docker-compose.yml" | yq -r '.services[].ports[]' | grep -E ':5901$' | sed -E 's/:5901$//g')
 fi
-if [ $# -gt 2 ]; then
+if [ $# -gt 2 ] && [ -n "$3" ]; then
     VNC_OPTIONS="$3"
 else
     VNC_OPTIONS='-fullscreen -fullscreenmode=Selected -FullScreenSelectedMonitors=2,3 -remoteresize=1'
+fi
+if [ $# -gt 3 ] && [ -n "$4" ]; then
+    SSH_USER="$4"
+else
+    SSH_USER=""
 fi
 
 function get-window-title(){
@@ -67,6 +72,27 @@ if [ -z "$VNC_PASSORD" ]; then
     exit 1
 fi
 
+# ==========================================
+# START OF AUDIO ROUTING VIA SSH (OPTIONAL)
+# ==========================================
+if [ -n "$SSH_USER" ]; then
+    # Starts the SSH tunnel in the background and suppresses output.
+    # -N: Only opens ports, does not execute commands
+    # -o StrictHostKeyChecking=accept-new: Prevents the script from hanging by asking "yes/no"
+    export SSHPASS="$VNC_PASSORD"
+    sshpass -e ssh -o StrictHostKeyChecking=accept-new -N -R 4713:127.0.0.1:4713 "${SSH_USER}@${VNC_HOST}" &
+    SSH_PID=$!
+
+    unset SSHPASS
+
+    # Ensures that when VNC is closed or the script is cancelled, the SSH tunnel is destroyed
+    trap "kill $SSH_PID 2>/dev/null" EXIT
+    echo -e "\n[+] Audio SSH tunnel activated for user: ${SSH_USER}"
+else
+    echo -e "\n[-] Audio SSH tunnel disabled (user not provided)."
+fi
+# ==========================================
+
 set-title-and-put-in-fullscreen &
 
 COMMAND="vncviewer ${VNC_OPTIONS} \"${VNC_HOST}:${VNC_PORT}\" -passwd /dev/stdin"
@@ -74,4 +100,3 @@ COMMAND="vncviewer ${VNC_OPTIONS} \"${VNC_HOST}:${VNC_PORT}\" -passwd /dev/stdin
 echo "$ $COMMAND"
 
 echo "$VNC_PASSORD" | vncpasswd -f | bash -c "$COMMAND" || echo -n ''
-
